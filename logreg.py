@@ -1,6 +1,6 @@
 import numpy as np
 import util
-
+import matplotlib.pyplot as plt 
 
 def main(train_path, valid_path, save_path):
     """Problem: Logistic regression with Newton's Method.
@@ -11,7 +11,7 @@ def main(train_path, valid_path, save_path):
         save_path: Path to save predicted probabilities using np.savetxt().
     """
     x_train, y_train = util.load_dataset(train_path, add_intercept=True)
-
+    x_valid, y_valid = util.load_dataset(valid_path, add_intercept=True)
     # access the first element of the x values: print(x_train[0,1])
     # print(y_train)
     # *** START CODE HERE ***
@@ -19,13 +19,35 @@ def main(train_path, valid_path, save_path):
     # Plot decision boundary on top of validation set set
     # Use np.savetxt to save predictions on eval set to save_path
 
-    # Initialize values
-    theta = np.zeros((2, 1))  # Initial value given in problem statement
-    n = 1
-
-
     clf = LogisticRegression()
-    clf.fit(x_train,y_train)
+    theta = clf.fit(x_train, y_train)
+    clf.predict(x_valid)
+    x1DB = np.array([min(x_valid[:,1]), max(x_valid[:,1])])
+    x2DB = -(theta[1][0]*x1DB + theta[0][0])/theta[2][0]
+    
+    
+    x1Ones = []
+    x2Ones = []
+    x1Zeros = []
+    x2Zeros = []
+    #Determine which data points are  and which are 1
+    for i in range(0,len(x_valid)):
+        if (y_valid[i]==1):
+            x1Ones.append(x_valid[i][1])
+            x2Ones.append(x_valid[i][2])
+        else:
+            x1Zeros.append(x_valid[i][1])
+            x2Zeros.append(x_valid[i][2])
+    
+    #Plot
+    plt.scatter(x1Zeros,x2Zeros,marker='o',c="blue")  
+    plt.scatter(x1Ones,x2Ones,marker='v',c="red")
+    plt.plot(x1DB,x2DB)
+    plt.legend(['Decision Boundary','y=0','y=1'])
+    plt.xlabel('X1')
+    plt.ylabel('X2')
+    plt.show()
+    
     
     # *** END CODE HERE ***
 
@@ -38,6 +60,7 @@ class LogisticRegression:
         > clf.fit(x_train, y_train)
         > clf.predict(x_eval)
     """
+    #
 
     def __init__(self, step_size=0.01, max_iter=1000000, eps=1e-5,
                  theta_0=None, verbose=True):
@@ -63,55 +86,54 @@ class LogisticRegression:
             y: Training example labels. Shape (n_examples,).
         """
         # *** START CODE HERE ***
-        #Initialization Values
+        # Initialization Values
         theta = self.theta
-        alpha = self.step_size #Fixed learning rate as described in Piazza @192
         nValues = len(x)
-        counter = 0;
+        counter = 0
+
         if (theta == None):
-            theta = np.zeros([2,1])
+            theta = np.zeros([3, 1])
+
+        thetaPrev = np.ones([3, 1])
         
-        thetaPrev = np.ones([2,1])
-        
-        while( (np.linalg.norm(theta.T - thetaPrev.T) > self.eps) and counter < self.max_iter ): 
-            #Initialize 
-            theta1Vec = np.zeros([1,len(x)])
-            theta2Vec = np.zeros([1,len(x)])
-            #print(theta)
-            for n in range(0,nValues-1):
+        while((np.linalg.norm(theta.T - thetaPrev.T,1) > self.eps) and counter < self.max_iter):
+            # Initialize
+            gradientSum = [] #Size of theta-vector
+            hessianSum = [] #Size of Hessian matrix
+    
+            for n in range(0, nValues):
                 # Compute h_theta(x) as defined in Lecture 3 Notes
-                hThetaX = 1/(1 + np.exp(np.matmul(-theta.T, x[n, 1:3])))
+                hThetaX = 1/(1 + np.exp(-np.matmul(theta.T, x[n])))
 
                 # Compute the gradient of the log likelihood function
-                logGradient = (y[n] - hThetaX)*x[n, 1:3]
-
+                logGradient = (y[n] - hThetaX)*x[n]
+                
+                gradientSum.append(logGradient)
                 # Compute the Hessian of the log likelihood function wrt to theta1 and theta2 (first and second index of x vector)
-                h1 = -hThetaX*(1-hThetaX)*x[n, 1]**2
-                h2 = -hThetaX*(1-hThetaX)*x[n, 1]*x[n, 2]
-                h4 = -hThetaX*(1-hThetaX)*x[n, 2]**2
+                H = np.array([[x[n, 0], x[n, 1], x[n, 2]], [
+                             x[n, 1], x[n, 1]**2, x[n, 1]*x[n, 2]], [x[n, 2], x[n, 2]*x[n, 1], x[n, 2]**2]])
+                
 
-                
-                logHessian = np.array([[h1[0],h2[0]],[h2[0],h4[0]]]) 
-
-                # Implement Newton method code as per Lecture 3 Notes
-                hessInv = np.linalg.pinv(logHessian)
-                
-                
-                theta1Vec[0][n] = (alpha*np.matmul(hessInv,logGradient))[0]
-                theta2Vec[0][n] = (alpha*np.matmul(hessInv,logGradient))[1]
-                
-            theta1 = (-1/nValues)*np.sum(theta1Vec)
-            theta2 = (-1/nValues)*np.sum(theta2Vec)
-            thetaPrev = theta
-            theta = theta - np.array([[theta1],[theta2]])
-            print(theta)
-            #theta = theta.T[0] - [theta1,theta2]
-            counter = counter + 1
-            #theta = np.array([theta],[theta2])
-            print((np.linalg.norm(theta.T - thetaPrev.T)) ) 
+                logHessian = (1-hThetaX+hThetaX**2)*H
             
-        
-     
+                hessianSum.append(logHessian)
+            
+            #Compute the sum of the gradient and hessian
+            hessian = -(1/nValues)*sum(hessianSum)
+            gradient = -(1/nValues)*sum(gradientSum)
+            
+            #Update Theta
+            thetaPrev = theta
+            deltaTheta = self.step_size*(-np.linalg.solve(hessian,gradient))
+            theta = theta.T - deltaTheta
+            theta = theta.T
+            counter = counter + 1
+            print((np.linalg.norm(theta.T - thetaPrev.T,1)) )
+        self.theta = theta
+        return theta
+            
+
+            
     # *** END CODE HERE ***
 
     def predict(self, x):
@@ -124,14 +146,20 @@ class LogisticRegression:
             Outputs of shape (n_examples,).
         """
         # *** START CODE HERE ***
+        theta = self.theta
+        yPredict = []
+        for i in range(0,len(x)):
+            yPredict.append(np.matmul(theta.T[0],x[i]))
+            
+        return yPredict
         # *** END CODE HERE ***
 
 
 if __name__ == '__main__':
-    main(train_path='ds1_train.csv',
-         valid_path='ds1_valid.csv',
-         save_path='logreg_pred_1.txt')
+    # main(train_path='ds1_train.csv',
+    #      valid_path='ds1_valid.csv',
+    #      save_path='logreg_pred_1.txt')
 
-    # main(train_path='ds2_train.csv',
-    #      valid_path='ds2_valid.csv',
-    #      save_path='logreg_pred_2.txt')
+    main(train_path='ds2_train.csv',
+         valid_path='ds2_valid.csv',
+         save_path='logreg_pred_2.txt')
