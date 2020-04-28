@@ -2,6 +2,7 @@ import numpy as np
 import util
 import matplotlib.pyplot as plt 
 
+
 def main(train_path, valid_path, save_path):
     """Problem: Logistic regression with Newton's Method.
 
@@ -10,6 +11,7 @@ def main(train_path, valid_path, save_path):
         valid_path: Path to CSV file containing dataset for validation.
         save_path: Path to save predicted probabilities using np.savetxt().
     """
+
     x_train, y_train = util.load_dataset(train_path, add_intercept=True)
     x_valid, y_valid = util.load_dataset(valid_path, add_intercept=True)
     # access the first element of the x values: print(x_train[0,1])
@@ -21,16 +23,16 @@ def main(train_path, valid_path, save_path):
 
     clf = LogisticRegression()
     theta = clf.fit(x_train, y_train)
-    clf.predict(x_valid)
-    x1DB = np.array([min(x_valid[:,1]), max(x_valid[:,1])])
+    y_predict = clf.predict(x_valid)
+    x1DB = np.linspace(min(x_valid[:,1]), max(x_valid[:,1]))
     x2DB = -(theta[1][0]*x1DB + theta[0][0])/theta[2][0]
-    
+    #x2DB = -(theta[1][0]*x1DB + theta[0][0])/theta[2][0] #For Problem 6
     
     x1Ones = []
     x2Ones = []
     x1Zeros = []
     x2Zeros = []
-    #Determine which data points are  and which are 1
+    #Determine which data points are 0 and which are 1
     for i in range(0,len(x_valid)):
         if (y_valid[i]==1):
             x1Ones.append(x_valid[i][1])
@@ -39,10 +41,10 @@ def main(train_path, valid_path, save_path):
             x1Zeros.append(x_valid[i][1])
             x2Zeros.append(x_valid[i][2])
     
-    #Plot
+    #Plot  
     plt.scatter(x1Zeros,x2Zeros,marker='o',c="blue")  
-    plt.scatter(x1Ones,x2Ones,marker='v',c="red")
-    plt.plot(x1DB,x2DB)
+    plt.scatter(x1Ones,x2Ones,marker='v',c="green")
+    plt.plot(x1DB,x2DB,c="red")
     plt.legend(['Decision Boundary','y=0','y=1'])
     plt.xlabel('X1')
     plt.ylabel('X2')
@@ -91,30 +93,46 @@ class LogisticRegression:
         nValues = len(x)
         counter = 0
 
+        #For Problem 6d
+        # rho = 1/11
+        # kappa = rho/(1-rho)
+        
         if (theta == None):
             theta = np.zeros([3, 1])
 
         thetaPrev = np.ones([3, 1])
         
+    
         while((np.linalg.norm(theta.T - thetaPrev.T,1) > self.eps) and counter < self.max_iter):
+            
             # Initialize
             gradientSum = [] #Size of theta-vector
             hessianSum = [] #Size of Hessian matrix
-    
+            
             for n in range(0, nValues):
+                
+                #For Problem 6d
+                # omega = 0
+                # if (y[n]==1):
+                #     omega = 1/kappa
+                # else:
+                #     omega = 1
+                
                 # Compute h_theta(x) as defined in Lecture 3 Notes
                 hThetaX = 1/(1 + np.exp(-np.matmul(theta.T, x[n])))
 
                 # Compute the gradient of the log likelihood function
                 logGradient = (y[n] - hThetaX)*x[n]
+                # logGradient = omega*logGradient #For Problem 6d
                 
                 gradientSum.append(logGradient)
                 # Compute the Hessian of the log likelihood function wrt to theta1 and theta2 (first and second index of x vector)
                 H = np.array([[x[n, 0], x[n, 1], x[n, 2]], [
                              x[n, 1], x[n, 1]**2, x[n, 1]*x[n, 2]], [x[n, 2], x[n, 2]*x[n, 1], x[n, 2]**2]])
                 
-
+                
                 logHessian = (1-hThetaX+hThetaX**2)*H
+                # logHessian = omega*logHessian #For Problem 6d
             
                 hessianSum.append(logHessian)
             
@@ -122,12 +140,18 @@ class LogisticRegression:
             hessian = -(1/nValues)*sum(hessianSum)
             gradient = -(1/nValues)*sum(gradientSum)
             
+            #For Problem 6d
+            # hessian = ( -(1+kappa)/(2*nValues) )*sum(hessianSum)
+            # gradient = ( -(1+kappa)/(2*nValues) )*sum(gradientSum)
+            
             #Update Theta
             thetaPrev = theta
             deltaTheta = self.step_size*(-np.linalg.solve(hessian,gradient))
             theta = theta.T - deltaTheta
             theta = theta.T
             counter = counter + 1
+            # if (counter == 5):
+            #     break
             print((np.linalg.norm(theta.T - thetaPrev.T,1)) )
         self.theta = theta
         return theta
@@ -163,3 +187,4 @@ if __name__ == '__main__':
     main(train_path='ds2_train.csv',
          valid_path='ds2_valid.csv',
          save_path='logreg_pred_2.txt')
+
