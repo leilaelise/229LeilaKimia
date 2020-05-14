@@ -43,6 +43,11 @@ def predict(state, kernel, x_i):
     y_predict = 0
     for j in range(0,len(x_seen)):
         y_predict = y_predict + betaList[j]*kernel(x_seen[j],x_i) #dot product of theta and x_i
+
+    if (y_predict >= 0.5):
+        y_predict = 1
+    else:
+        y_predict = 0
     
     return y_predict
     
