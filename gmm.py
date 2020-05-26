@@ -1,12 +1,22 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-
+from scipy.stats import multivariate_normal
+ 
 PLOT_COLORS = ['red', 'green', 'blue', 'orange']  # Colors for your plots
 K = 4           # Number of Gaussians in the mixture model
 NUM_TRIALS = 3  # Number of trials to run (can be adjusted for debugging)
 UNLABELED = -1  # Cluster label for unlabeled data points (do not change)
 
+
+def ComputeWeight(dim,sigma,x,mu,phi):
+    #Gaussian 
+    eta = 1/( ( (2*np.pi)**(dim/2) )*np.linalg.det(sigma)**(1/2) )
+    bbT = np.matmul( np.matmul((x - mu),np.linalg.pinv(sigma)), (x-mu))
+    pXZ = eta*np.exp(-0.5*bbT)
+    return pXZ*phi 
+   
+    
 #Compute the covariance matrix of samples
 def covMatrix(dim,x,mu,start,stop):
 
@@ -53,6 +63,7 @@ def main(is_semi_supervised, trial_num):
         vec = x[start:stop]
         sigma.append(covMatrix(dim,x,mu[i],start,stop))  
     
+    
     # (2) Initialize phi to place equal probability on each Gaussian
     # phi should be a numpy array of shape (K,)
     phi = np.zeros([k,1])
@@ -64,7 +75,7 @@ def main(is_semi_supervised, trial_num):
     w = np.zeros([m,k])
     for i in range(0,m):
         w[i] = 1/m
-        
+    
     # *** END CODE HERE ***
 
     if is_semi_supervised:
@@ -102,15 +113,74 @@ def run_em(x, w, phi, mu, sigma):
     eps = 1e-3  # Convergence threshold
     max_iter = 1000
 
+    #Dimensions
+    m = len(x[:,0])
+    k = 4
+    dim = 2
+    
     # Stop when the absolute change in log-likelihood is < eps
     # See below for explanation of the convergence criterion
     it = 0
     ll = prev_ll = None
-    while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
+    #while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
+    while (True):
         pass  # Just a placeholder for the starter code
         # *** START CODE HERE
+
         # (1) E-step: Update your estimates in w
+        for i in range(0,m): 
+            for j in range(0,k):                          
+                denom = 0
+                num = 0
+                for l in range(0,k):
+                    pXZ = ComputeWeight( dim,sigma[l],x[i],mu[l],phi[l] )
+                    if (l==j):
+                        num = pXZ
+                    denom = denom + pXZ #Summation, law of total probability
+                pZX = num/denom
+                w[i][j] = pZX     
+                print(pZX)    
+
+        #Debugging: Check that weights add up to 1. Right now, they do nots
+        for j in range(0,k): 
+            summation = 0         
+            for i in range(0,m):
+                summation = summation + w[i][j]
+            print(summation)
+               
+        break
         # (2) M-step: Update the model parameters phi, mu, and sigma
+        
+        #Update phi
+        for j in range(0,k):
+            sumPhi = 0
+            for i in range(0,m):
+                sumPhi = sumPhi + w[i][j]
+            phi[j] = sumPhi
+        phi = (1/m)*phi
+
+        #Update mu
+        for j in range(0,k):
+            numSum = 0
+            denomSum = 0
+            for i in range(0,m):
+                numSum = numSum + w[i][j]*x[i]
+                denomSum = denomSum + w[i][j]
+            mu[j] = numSum/denomSum 
+        
+
+        #Update sigma
+        for j in range(0,k):
+            sigmaNum = 0
+            sigmaDenom = 0
+            for i in range(0,m):
+                sigmaNum = w[i][j]*( (x[i]-mu[j])*(x[i]-mu[j]).reshape(dim,1) )
+                sigmaDenom = sigmaDenom + w[i][j]          
+            sigma[j] = sigmaNum/sigmaDenom
+           
+                
+
+        break     
         # (3) Compute the log-likelihood of the data to check for convergence.
         # By log-likelihood, we mean `ll = sum_x[log(sum_z[p(x|z) * p(z)])]`.
         # We define convergence by the first iteration where abs(ll - prev_ll) < eps.
