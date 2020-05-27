@@ -2,14 +2,43 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from scipy.stats import multivariate_normal
+import random 
  
 PLOT_COLORS = ['red', 'green', 'blue', 'orange']  # Colors for your plots
 K = 4           # Number of Gaussians in the mixture model
 NUM_TRIALS = 3  # Number of trials to run (can be adjusted for debugging)
 UNLABELED = -1  # Cluster label for unlabeled data points (do not change)
 
+def LogLikelihoodSemi(m,dim,sigma,x,x_tilde,z_tilde,mu,phi,alpha):
+    k = 4
+    sumX = 0
+    n = len(x_tilde[:,0])
+    for i in range(0,m):
+        sumZ = 0
+        for j in range(0,k):
+            sumZ = sumZ + pXZ_pZ(dim,sigma[j],x[i],mu[j],phi[j])
+        sumX = sumX + np.log(sumZ)
+    
+    sumSupervised = 0
+    for i in range(0,n):
+        idx = int(z_tilde[i])
+        sumSupervised = sumSupervised + np.log(pXZ_pZ(dim,sigma[idx],x_tilde[i],mu[idx],phi[idx]))
+                                            
+    totalSum = sumX[0] + alpha*sumSupervised
+    
+    return totalSum
 
-def ComputeWeight(dim,sigma,x,mu,phi):
+def LogLikelihood(m,dim,sigma,x,mu,phi):
+    k = 4
+    sumX = 0
+    for i in range(0,m):
+        sumZ = 0
+        for j in range(0,k):
+            sumZ = sumZ + pXZ_pZ(dim,sigma[j],x[i],mu[j],phi[j])
+        sumX = sumX + np.log(sumZ)
+    return sumX[0]
+
+def pXZ_pZ(dim,sigma,x,mu,phi):
     #Gaussian 
     eta = 1/( ( (2*np.pi)**(dim/2) )*np.linalg.det(sigma)**(1/2) )
     bbT = np.matmul( np.matmul((x - mu),np.linalg.pinv(sigma)), (x-mu))
@@ -48,13 +77,14 @@ def main(is_semi_supervised, trial_num):
     # *** START CODE HERE ***
     # (1) Initialize mu and sigma by splitting the n_examples data points uniformly at random
     # into K groups, then calculating the sample mean and covariance for each group
-    k = 4;
-    dim = 2;
+    k = 4
+    dim = 2
     m = len(x[:,0])
     mu = np.zeros([k,dim])
-    sigma = [];
+    sigma = []
     #Initialize mu and sigma into k=4 groups
     #Algorithm: Randomly pick four mu from divided data and compute covariance according to that mu
+    #random.shuffle(x)
     for i in range(0,k):
         start = int(i*m/k)
         stop = int((i+1)*m/k)
@@ -68,13 +98,13 @@ def main(is_semi_supervised, trial_num):
     # phi should be a numpy array of shape (K,)
     phi = np.zeros([k,1])
     for i in range(0,k):
-        phi[i] = 1/k;
+        phi[i] = 1/k
           
     # (3) Initialize the w values to place equal probability on each Gaussian
     # w should be a numpy array of shape (m, K)
     w = np.zeros([m,k])
     for i in range(0,m):
-        w[i] = 1/m
+        w[i] = 1/k
     
     # *** END CODE HERE ***
 
@@ -84,9 +114,9 @@ def main(is_semi_supervised, trial_num):
         w = run_em(x, w, phi, mu, sigma)
 
     # Plot your predictions
-    z_pred = np.zeros(n)
+    z_pred = np.zeros(m)
     if w is not None:  # Just a placeholder for the starter code
-        for i in range(n):
+        for i in range(m):
             z_pred[i] = np.argmax(w[i])
 
     plot_gmm_preds(x, z_pred, is_semi_supervised, plot_id=trial_num)
@@ -121,9 +151,10 @@ def run_em(x, w, phi, mu, sigma):
     # Stop when the absolute change in log-likelihood is < eps
     # See below for explanation of the convergence criterion
     it = 0
-    ll = prev_ll = None
-    #while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
-    while (True):
+    prev_ll = 0
+    ll  = LogLikelihood(m,dim,sigma,x,mu,phi)
+    while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
+        prev_ll = ll
         pass  # Just a placeholder for the starter code
         # *** START CODE HERE
 
@@ -132,23 +163,11 @@ def run_em(x, w, phi, mu, sigma):
             for j in range(0,k):                          
                 denom = 0
                 num = 0
-                for l in range(0,k):
-                    pXZ = ComputeWeight( dim,sigma[l],x[i],mu[l],phi[l] )
-                    if (l==j):
-                        num = pXZ
-                    denom = denom + pXZ #Summation, law of total probability
-                pZX = num/denom
+                pZX = pXZ_pZ(dim,sigma[j],x[i],mu[j],phi[j])
                 w[i][j] = pZX     
-                print(pZX)    
+            w[i] = w[i]/sum(w[i])    
 
-        #Debugging: Check that weights add up to 1. Right now, they do nots
-        for j in range(0,k): 
-            summation = 0         
-            for i in range(0,m):
-                summation = summation + w[i][j]
-            print(summation)
                
-        break
         # (2) M-step: Update the model parameters phi, mu, and sigma
         
         #Update phi
@@ -174,15 +193,16 @@ def run_em(x, w, phi, mu, sigma):
             sigmaNum = 0
             sigmaDenom = 0
             for i in range(0,m):
-                sigmaNum = w[i][j]*( (x[i]-mu[j])*(x[i]-mu[j]).reshape(dim,1) )
+                sigmaNum = sigmaNum + w[i][j]*( (x[i]-mu[j])*(x[i]-mu[j]).reshape(dim,1) )
                 sigmaDenom = sigmaDenom + w[i][j]          
             sigma[j] = sigmaNum/sigmaDenom
-           
-                
-
-        break     
+                            
         # (3) Compute the log-likelihood of the data to check for convergence.
         # By log-likelihood, we mean `ll = sum_x[log(sum_z[p(x|z) * p(z)])]`.
+        prev_ll = ll
+        ll = LogLikelihoodSemi(m,dim,sigma,x,mu,phi)
+        
+        print( abs(ll - prev_ll) )
         # We define convergence by the first iteration where abs(ll - prev_ll) < eps.
         # Hint: For debugging, recall part (a). We showed that ll should be monotonically increasing.
         # *** END CODE HERE ***
@@ -214,20 +234,76 @@ def run_semi_supervised_em(x, x_tilde, z_tilde, w, phi, mu, sigma):
     eps = 1e-3   # Convergence threshold
     max_iter = 1000
 
+    #Dimensions
+        #Dimensions
+    m = len(x[:,0])
+    n = len([x_tilde[:,0]])
+    k = 4
+    dim = 2
+    
     # Stop when the absolute change in log-likelihood is < eps
     # See below for explanation of the convergence criterion
     it = 0
-    ll = prev_ll = None
+    prev_ll = 0
+    ll = LogLikelihoodSemi(m,dim,sigma,x,x_tilde,z_tilde,mu,phi,alpha)
     while it < max_iter and (prev_ll is None or np.abs(ll - prev_ll) >= eps):
         pass  # Just a placeholder for the starter code
         # *** START CODE HERE ***
         # (1) E-step: Update your estimates in w
+        for i in range(0,m): 
+            for j in range(0,k):                          
+                denom = 0
+                num = 0
+                pZX = pXZ_pZ(dim,sigma[j],x[i],mu[j],phi[j])
+                w[i][j] = pZX     
+            w[i] = w[i]/sum(w[i])    
         # (2) M-step: Update the model parameters phi, mu, and sigma
+        
+        #Update phi
+        for j in range(0,k):
+            sumPhi = 0
+            for i in range(0,m):
+                sumPhi = sumPhi + w[i][j]
+            phi[j] = sumPhi + alpha*n
+        phi = (1/(m+alpha*n))*phi
+
+        #Update mu
+        for j in range(0,k):
+            numSum = 0
+            numTilde = 0
+            denomSum = 0
+
+            for i in range(0,m):
+                numSum = numSum + w[i][j]*x[i]
+                denomSum = denomSum + w[i][j]
+                   
+            for i in range(0,n):
+                numTilde = numTilde + x_tilde[i]
+                
+            mu[j] = (numSum + alpha*numTilde)/(denomSum + alpha*n)
+        
+
+        #Update sigma
+        for j in range(0,k):
+            sigmaNum = 0
+            sigmaDenom = 0
+            tildeSum = 0
+            for i in range(0,m):
+                sigmaNum = sigmaNum + w[i][j]*( (x[i]-mu[j])*(x[i]-mu[j]).reshape(dim,1) )
+                sigmaDenom = sigmaDenom + w[i][j]  
+            
+            for i in range(0,n):
+                tildeSum = tildeSum + ( (x_tilde[i]-mu[j])*(x_tilde[i]-mu[j]).reshape(dim,1) )
+                
+            sigma[j] = (sigmaNum+tildeSum)/(sigmaDenom +alpha*n)       
+        
         # (3) Compute the log-likelihood of the data to check for convergence.
+        prev_ll = ll
+        ll = LogLikelihoodSemi(m,dim,sigma,x,x_tilde,z_tilde,mu,phi,alpha)
         # Hint: Make sure to include alpha in your calculation of ll.
         # Hint: For debugging, recall part (a). We showed that ll should be monotonically increasing.
         # *** END CODE HERE ***
-
+        print( abs(ll - prev_ll) )
     return w
 
 
@@ -294,11 +370,11 @@ if __name__ == '__main__':
     # Run NUM_TRIALS trials to see how different initializations
     # affect the final predictions with and without supervision
     for t in range(NUM_TRIALS):
-        main(is_semi_supervised=False, trial_num=t)
+       # main(is_semi_supervised=False, trial_num=t)
 
         # *** START CODE HERE ***
         # Once you've implemented the semi-supervised version,
         # uncomment the following line.
         # You do not need to add any other lines in this code block.
-        # main(is_semi_supervised=True, trial_num=t)
+         main(is_semi_supervised=True, trial_num=t)
         # *** END CODE HERE ***
