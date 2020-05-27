@@ -167,7 +167,7 @@ def run_em(x, w, phi, mu, sigma):
                 w[i][j] = pZX     
             w[i] = w[i]/sum(w[i])    
 
-               
+        
         # (2) M-step: Update the model parameters phi, mu, and sigma
         
         #Update phi
@@ -262,40 +262,56 @@ def run_semi_supervised_em(x, x_tilde, z_tilde, w, phi, mu, sigma):
         #Update phi
         for j in range(0,k):
             sumPhi = 0
+            phiTilde = 0
+            
             for i in range(0,m):
                 sumPhi = sumPhi + w[i][j]
-            phi[j] = sumPhi + alpha*n
+            
+            for i in range(0,n):
+                if (int(z_tilde[i]) == j):
+                    phiTilde = phiTilde + 1
+                                     
+            phi[j] = sumPhi + alpha*phiTilde
         phi = (1/(m+alpha*n))*phi
 
         #Update mu
+            
         for j in range(0,k):
             numSum = 0
-            numTilde = 0
             denomSum = 0
+            
+            numTilde = 0
+            denomTilde = 0
+            for i in range(0,n):
+                if (int(z_tilde[i]) == j):
+                    numTilde = numTilde + x_tilde[i]
+                    denomTilde = denomTilde + 1
 
             for i in range(0,m):
                 numSum = numSum + w[i][j]*x[i]
                 denomSum = denomSum + w[i][j]
-                   
-            for i in range(0,n):
-                numTilde = numTilde + x_tilde[i]
-                
-            mu[j] = (numSum + alpha*numTilde)/(denomSum + alpha*n)
+          
+            mu[j] = (numSum + alpha*numTilde)/(denomSum + alpha*denomTilde)
         
 
         #Update sigma
+                
         for j in range(0,k):
             sigmaNum = 0
             sigmaDenom = 0
             tildeSum = 0
+            sigmaTildeDenom = 0
+            
+            for i in range(0,n):
+                if (int(z_tilde[i]) == j):
+                    tildeSum = tildeSum + ( (x_tilde[i]-mu[j])*(x_tilde[i]-mu[j]).reshape(dim,1) )
+                    sigmaTildeDenom = sigmaTildeDenom + 1
+            
             for i in range(0,m):
                 sigmaNum = sigmaNum + w[i][j]*( (x[i]-mu[j])*(x[i]-mu[j]).reshape(dim,1) )
                 sigmaDenom = sigmaDenom + w[i][j]  
-            
-            for i in range(0,n):
-                tildeSum = tildeSum + ( (x_tilde[i]-mu[j])*(x_tilde[i]-mu[j]).reshape(dim,1) )
-                
-            sigma[j] = (sigmaNum+tildeSum)/(sigmaDenom +alpha*n)       
+                           
+            sigma[j] = (sigmaNum+alpha*tildeSum)/(sigmaDenom +alpha*sigmaTildeDenom)       
         
         # (3) Compute the log-likelihood of the data to check for convergence.
         prev_ll = ll
